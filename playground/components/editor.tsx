@@ -11,11 +11,45 @@ import { files as reactViteFiles } from '@/configurations/react-vite';
 import { files as nextjsFiles } from '@/configurations/nextjs';
 import { MonacoEditor } from './monaco-editor';
 import { GridResizer } from './gridResize';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FrameworkSwitcher } from './framework-switcher';
-import { useAtomValue, atom } from 'jotai';
+import { atom, useAtom, useAtomValue } from 'jotai';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { z } from 'zod';
+
+const zFrameworks = z.enum(['react', 'nextjs']);
 
 export const frameworkAtom = atom<Frameworks>('react');
+
+export const useFrameworkSyncUrl = () => {
+  const { push } = useRouter();
+  const params = useSearchParams();
+  const [framework, setFramework] = useAtom(frameworkAtom);
+
+  // keep url in sync with atom
+  useEffect(() => {
+    push(`/?framework=${framework}`);
+  }, [framework]);
+
+  //parse url
+  const rawFrameworkParam = params.get('framework');
+  const parseResult = zFrameworks.safeParse(rawFrameworkParam);
+  let finalFrameworkParam: Frameworks = 'react';
+  if (!parseResult.success) {
+    push(`/?framework=react`);
+  } else {
+    finalFrameworkParam = parseResult.data;
+  }
+
+  // keep atom in sync with url
+  useEffect(() => {
+    if (framework !== finalFrameworkParam) {
+      setFramework(finalFrameworkParam);
+    }
+  }, [finalFrameworkParam]);
+
+  return [framework, setFramework] as const;
+};
 
 const FRAMEWORK_TEMPLATE_MAP: Record<Frameworks, SandpackPredefinedTemplate> = {
   nextjs: 'nextjs',
@@ -28,6 +62,7 @@ const FRAMEWORK_FILES_MAP: Record<Frameworks, SandpackFiles> = {
 };
 
 export const Editor: React.FC = () => {
+  useFrameworkSyncUrl();
   const framework = useAtomValue(frameworkAtom);
 
   const template = FRAMEWORK_TEMPLATE_MAP[framework];
